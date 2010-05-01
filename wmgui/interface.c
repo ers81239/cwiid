@@ -46,6 +46,7 @@ create_winMain (void)
   GtkWidget *chkAcc;
   GtkWidget *chkIR;
   GtkWidget *chkExt;
+  GtkWidget *chkLog;
   GtkWidget *menuControls;
   GtkWidget *menuControls_menu;
   GtkWidget *chkLED1;
@@ -315,6 +316,14 @@ create_winMain (void)
   gtk_widget_show (chkAcc);
   gtk_container_add (GTK_CONTAINER (menuSettings_menu), chkAcc);
   gtk_widget_add_accelerator (chkAcc, "activate", accel_group,
+                              GDK_A, (GdkModifierType) GDK_CONTROL_MASK,
+                              GTK_ACCEL_VISIBLE);
+
+  chkLog = gtk_check_menu_item_new_with_mnemonic ("_Log");
+  gtk_widget_set_name (chkLog, "chkLog");
+  gtk_widget_show (chkLog);
+  gtk_container_add (GTK_CONTAINER (menuSettings_menu), chkLog);
+  gtk_widget_add_accelerator (chkLog, "activate", accel_group,
                               GDK_A, (GdkModifierType) GDK_CONTROL_MASK,
                               GTK_ACCEL_VISIBLE);
 
@@ -1546,6 +1555,7 @@ create_winMain (void)
   GLADE_HOOKUP_OBJECT (winMain, chkAcc, "chkAcc");
   GLADE_HOOKUP_OBJECT (winMain, chkIR, "chkIR");
   GLADE_HOOKUP_OBJECT (winMain, chkExt, "chkExt");
+  GLADE_HOOKUP_OBJECT (winMain, chkLog, "chkLog");
   GLADE_HOOKUP_OBJECT (winMain, menuControls, "menuControls");
   GLADE_HOOKUP_OBJECT (winMain, menuControls_menu, "menuControls_menu");
   GLADE_HOOKUP_OBJECT (winMain, chkLED1, "chkLED1");

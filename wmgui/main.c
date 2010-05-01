@@ -34,6 +34,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <time.h>
+#include <sys/time.h>
 
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -66,7 +68,7 @@ GtkWidget *winMain;
 GtkWidget *winRW;
 GtkWidget *winDialog;
 GtkWidget *menuConnect, *menuDisconnect, *menuQuit, *menuRW, *menuAbout;
-GtkWidget *chkAcc, *chkIR, *chkExt;
+GtkWidget *chkAcc, *chkIR, *chkExt, *chkLog;
 GtkWidget *chkLED1, *chkLED2, *chkLED3, *chkLED4;
 GtkWidget *chkRumble;
 GtkWidget *evUp, *evDown, *evLeft, *evRight, *evA, *evB,
@@ -141,6 +143,7 @@ void menuAbout_activate(void);
 void chkAcc_toggled(void);
 void chkIR_toggled(void);
 void chkExt_toggled(void);
+void chkLog_toggled(void);
 void chkLED_toggled(void);
 void chkRumble_toggled(void);
 void drawIR_expose_event(void);
@@ -247,6 +250,7 @@ int main (int argc, char *argv[])
 	chkAcc = lookup_widget(winMain, "chkAcc");
 	chkIR = lookup_widget(winMain, "chkIR");
 	chkExt = lookup_widget(winMain, "chkExt");
+        chkLog = lookup_widget(winMain, "chkLog");
 	chkLED1 = lookup_widget(winMain, "chkLED1");
 	chkLED2 = lookup_widget(winMain, "chkLED2");
 	chkLED3 = lookup_widget(winMain, "chkLED3");
@@ -399,6 +403,7 @@ int main (int argc, char *argv[])
 	g_signal_connect(chkAcc, "toggled", G_CALLBACK(chkAcc_toggled), NULL);
 	g_signal_connect(chkIR, "toggled", G_CALLBACK(chkIR_toggled), NULL);
 	g_signal_connect(chkExt, "toggled", G_CALLBACK(chkExt_toggled), NULL);
+        g_signal_connect(chkLog, "toggled", G_CALLBACK(chkLog_toggled), NULL);
 	g_signal_connect(chkLED1, "toggled", G_CALLBACK(chkLED_toggled), NULL);
 	g_signal_connect(chkLED2, "toggled", G_CALLBACK(chkLED_toggled), NULL);
 	g_signal_connect(chkLED3, "toggled", G_CALLBACK(chkLED_toggled), NULL);
@@ -758,6 +763,12 @@ void chkExt_toggled(void)
 		clear_classic_widgets();
 		clear_motionplus_widgets();
 	}
+	set_gui_state();
+}
+
+void chkLog_toggled(void)
+{
+
 	set_gui_state();
 }
 
@@ -1142,18 +1153,7 @@ void cwiid_acc(struct cwiid_acc_mesg *mesg)
 	double roll, pitch;
 	
 	if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkAcc))) {
-		g_snprintf(str, LBLVAL_LEN, "%X", mesg->acc[CWIID_X]);
-		gtk_label_set_text(GTK_LABEL(lblAccXVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
-		                              (double)mesg->acc[CWIID_X]/0xFF);
-		g_snprintf(str, LBLVAL_LEN, "%X", mesg->acc[CWIID_Y]);
-		gtk_label_set_text(GTK_LABEL(lblAccYVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
-		                              (double)mesg->acc[CWIID_Y]/0xFF);
-		g_snprintf(str, LBLVAL_LEN, "%X", mesg->acc[CWIID_Z]);
-		gtk_label_set_text(GTK_LABEL(lblAccZVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
-		                              (double)mesg->acc[CWIID_Z]/0xFF);
+
 
 		a_x = ((double)mesg->acc[CWIID_X] - wm_cal.zero[CWIID_X]) /
 		      (wm_cal.one[CWIID_X] - wm_cal.zero[CWIID_X]);
@@ -1171,14 +1171,51 @@ void cwiid_acc(struct cwiid_acc_mesg *mesg)
 
 		pitch = atan(a_y/a_z*cos(roll));
 
+                		g_snprintf(str, LBLVAL_LEN, "%.2f", a_x);
+		gtk_label_set_text(GTK_LABEL(lblAccXVal), str);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
+		                              (double)mesg->acc[CWIID_X]/0xFF);
+		g_snprintf(str, LBLVAL_LEN, "%.2f", a_y);
+		gtk_label_set_text(GTK_LABEL(lblAccYVal), str);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
+		                              (double)mesg->acc[CWIID_Y]/0xFF);
+		g_snprintf(str, LBLVAL_LEN, "%.2f",a_z);
+		gtk_label_set_text(GTK_LABEL(lblAccZVal), str);
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
+		                              (double)mesg->acc[CWIID_Z]/0xFF);
+
+
 		g_snprintf(str, LBLVAL_LEN, "%.2f", a);
 		gtk_label_set_text(GTK_LABEL(lblAccVal), str);
 		g_snprintf(str, LBLVAL_LEN, "%.2f", roll);
 		gtk_label_set_text(GTK_LABEL(lblRollVal), str);
 		g_snprintf(str, LBLVAL_LEN, "%.2f", pitch);
 		gtk_label_set_text(GTK_LABEL(lblPitchVal), str);
+                if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkLog)))
+                {
+                    write_log(a_x,a_y,a_z,a,roll,pitch);
+                }
+
 	}
 }
+
+
+double time_in_seconds()
+{
+    struct timeval t;
+    gettimeofday(&t, NULL);
+
+    return (double) ((double) t.tv_sec + (double) t.tv_usec / 1000000.0);
+
+}
+
+void write_log(double a_x, double a_y, double a_z, double a, double roll, double pitch)
+{
+
+    printf("%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",time_in_seconds(),a_x,a_y,a_z,a,roll,pitch);
+    
+}
+
 
 void cwiid_ir(struct cwiid_ir_mesg *mesg)
 {
