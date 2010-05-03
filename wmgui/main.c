@@ -63,6 +63,8 @@ struct cwiid_ir_mesg ir_data;
 struct stick nc_stick;
 struct stick cc_l_stick, cc_r_stick;
 
+double log_writes_per_second = 10;
+
 /* Widgets */
 GtkWidget *winMain;
 GtkWidget *winRW;
@@ -1211,8 +1213,17 @@ double time_in_seconds()
 
 void write_log(double a_x, double a_y, double a_z, double a, double roll, double pitch)
 {
+    static double last_write_time = 0;
+    double time_now = time_in_seconds();
+    
+    if ( time_now >= last_write_time + 1/log_writes_per_second) 
+    {
+        last_write_time = time_now;
+        printf("%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",time_in_seconds(),a_x,a_y,a_z,a,roll,pitch);
+    }
 
-    printf("%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",time_in_seconds(),a_x,a_y,a_z,a,roll,pitch);
+
+    
     
 }
 
