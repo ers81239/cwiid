@@ -36,6 +36,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/time.h>
+#include "sys/queue.h"
+
 
 #include <glib.h>
 #include <gtk/gtk.h>
@@ -63,7 +65,20 @@ struct cwiid_ir_mesg ir_data;
 struct stick nc_stick;
 struct stick cc_l_stick, cc_r_stick;
 
+/* Logging */
 double log_writes_per_second = 10;
+struct acc_log_entry {
+    double t;
+    double x;
+    double y;
+    double z;
+    double a;
+    double r;
+    double p;
+    TAILQ_ENTRY(acc_log_entry) acc_log_entries;
+};
+TAILQ_HEAD(,acc_log_entry) acc_log_entries_head;
+
 
 /* Widgets */
 GtkWidget *winMain;
@@ -442,6 +457,11 @@ int main (int argc, char *argv[])
 
 	gtk_main();
 	gdk_threads_leave();
+
+        /* Initialize Logging Entry Queue */
+        TAILQ_INIT(&acc_log_entries_head);
+
+
 	return 0;
 }
 
@@ -1213,13 +1233,153 @@ double time_in_seconds()
 
 void write_log(double a_x, double a_y, double a_z, double a, double roll, double pitch)
 {
-    static double last_write_time = 0;
+
+    static double LOG_CALIBRATION_INTERVAL = 5.0;
+    static double LOG_AVERAGING_INTERVAL = 0.3;
+    static double log_start_time = -1.0;
+    static double last_write_time = 0.0;
+    static struct acc_log_entry *acc_corrections;
+    static struct acc_log_entry *acc_thresholds;
+    static int f_calibration_complete = 0;
+
+
     double time_now = time_in_seconds();
+    struct acc_log_entry *new_entry;
+    struct acc_log_entry *log_entry;
+
+    struct acc_log_entry *acc_averages;
+
+/***TODO
+     * The static structs need to be malloc'ed but that doesn
+     * make sense if they are to be static
+     * we need to find a way to save the corrections/threshholds between 
+     * function calls
+     * Oh, OO, where are you when I need you most?
+     */
+
     
-    if ( time_now >= last_write_time + 1/log_writes_per_second) 
+
+    /* Get the start_time to track the calibration interval and to make
+     * the reported times start at 0
+     */
+    if (log_start_time<=0) {log_start_time=time_now;}
+
+    printf("Getting our log on %d\n",f_calibration_complete);
+
+    /*Check to see if we are still in the calibration interval*/
+    if (f_calibration_complete==0)
     {
+        printf("Calibration incomplete\n");
+        acc_corrections->x=0;
+        acc_corrections->y=0;
+        acc_corrections->z=0;
+        acc_corrections->a=0;
+        acc_corrections->r=0;
+        acc_corrections->p=0;
+        if  (time_now - LOG_CALIBRATION_INTERVAL > log_start_time)
+        {
+            printf("\n\nCalibration Complete\n\n");
+            acc_corrections->x=acc_averages->x;
+            acc_corrections->y=acc_averages->y;
+            acc_corrections->z=acc_averages->z;
+            acc_corrections->a=acc_averages->a;
+            acc_corrections->r=acc_averages->r;
+            acc_corrections->p=acc_averages->p;
+
+            acc_thresholds->x=acc_averages->x;
+            acc_thresholds->y=acc_averages->y;
+            acc_thresholds->z=acc_averages->z;
+            acc_thresholds->a=acc_averages->a;
+            acc_thresholds->r=acc_averages->r;
+            acc_thresholds->p=acc_averages->p;
+
+            f_calibration_complete = -1;
+
+        }
+    }
+
+
+    /*collect the current entry*/
+    new_entry = malloc(sizeof(*log_entry));
+    if (new_entry == NULL) {perror("malloc failed"); exit(EXIT_FAILURE); }
+
+    new_entry->x = a_x;
+    new_entry->y = a_y;
+    new_entry->z = a_z;
+    new_entry->a = a;
+    new_entry->r = roll;
+    new_entry->p = pitch;
+
+    TAILQ_INSERT_HEAD(&acc_log_entries_head, new_entry, acc_log_entries);
+
+    /*if it has been long enough to write a record, then purge stale entries
+     calculate averaged and corrected data and output it.*/
+
+    if ( time_now >= last_write_time + 1/log_writes_per_second)
+    {
+
         last_write_time = time_now;
-        printf("%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",time_in_seconds(),a_x,a_y,a_z,a,roll,pitch);
+
+        /*Delete all stale entries*/
+        TAILQ_FOREACH(log_entry, &acc_log_entries_head, acc_log_entries )
+        {
+            if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
+            {
+                /*This entry is too old.  Delete it*/
+                TAILQ_REMOVE(&acc_log_entries_head,  log_entry  , acc_log_entries);
+            }
+        }
+
+        /*Calculate averaged data*/
+        long entry_count = 0;
+        double x_sum, y_sum, z_sum, a_sum, r_sum, p_sum;
+        TAILQ_FOREACH(log_entry, &acc_log_entries_head, acc_log_entries )
+        {
+
+            if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
+            {
+                /*This entry is too old.  Delete it*/
+                TAILQ_REMOVE(&acc_log_entries_head,  log_entry  , acc_log_entries);
+            }
+            else
+            {
+                entry_count++;
+                x_sum += log_entry->x;
+                y_sum += log_entry->y;
+                z_sum += log_entry->z;
+                a_sum += log_entry->a;
+                r_sum += log_entry->r;
+                p_sum += log_entry->p;
+
+                acc_averages->x = x_sum/entry_count;
+                acc_averages->y = y_sum/entry_count;
+                acc_averages->z = z_sum/entry_count;
+                acc_averages->a = a_sum/entry_count;
+                acc_averages->r = r_sum/entry_count;
+                acc_averages->p = p_sum/entry_count;
+
+            }
+
+          
+
+        }
+
+        printf("%.5f,%.5f,%.5f,%.5f,%.5f,%.5f,%.5f\n",  \
+                            time_now-log_start_time,\
+                            acc_averages->x,\
+                            acc_averages->y,\
+                            acc_averages->z,\
+                            acc_averages->a,\
+                            acc_averages->r,\
+                            acc_averages->p);
+
+
+
+
+
+
+
+
     }
 
 
