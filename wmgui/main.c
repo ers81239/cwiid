@@ -66,7 +66,7 @@ struct stick nc_stick;
 struct stick cc_l_stick, cc_r_stick;
 
 /* Logging */
-double log_writes_per_second = 10;
+
 struct acc_log_entry {
     double t;
     double x;
@@ -1234,8 +1234,15 @@ double time_in_seconds()
 void write_log(double a_x, double a_y, double a_z, double a, double roll, double pitch)
 {
 
+  //  printf("START OF WRITE LOG\n");
+
+    static double log_writes_per_second = 10;
     static double LOG_CALIBRATION_INTERVAL = 2.0;
-    static double LOG_AVERAGING_INTERVAL = 0.05;
+    static double LOG_AVERAGING_INTERVAL = 0.1;
+    /*if ACC_STATIC_THRESHOLD is >=0, it will be used as the threshold.
+     *if it is negative, the calibration value for each axis will be used.
+     */
+    static double ACC_STATIC_THRESHOLD = .0000005;
     static double log_start_time = -1.0;
     static double last_write_time = 0.0;
     double time_now = 0;
@@ -1247,7 +1254,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
     struct acc_log_entry acc_averages_corrected;
     struct acc_log_entry *new_entry;
     struct acc_log_entry *log_entry;
-
+    struct acc_log_entry *tmp_log_entry;
 
     static int f_calibration_complete = 0;
 
@@ -1282,6 +1289,26 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
     new_entry->a = a;
     new_entry->r = roll;
     new_entry->p = pitch;
+/*
+    printf("\t%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
+                    time_now,\
+
+                    a_x-acc_corrections.x,\
+                    a_y-acc_corrections.y,\
+                    a_z-acc_corrections.z,\
+                    a-acc_corrections.a,\
+                    roll-acc_corrections.r,\
+                    pitch-acc_corrections.p,\
+                    a_x,\
+                    a_y,\
+                    a_z,\
+                    a,\
+                    roll,\
+                    pitch);
+
+*/
+
+
 
     TAILQ_INSERT_HEAD(&acc_log_entries_head, new_entry, acc_log_entries);
 
@@ -1292,41 +1319,57 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
     {
 
         if (f_calibration_complete == 0){
-            printf("calibrating....%f.2\n", time_now - LOG_CALIBRATION_INTERVAL);
+            printf("calibrating....%f.2\t", time_now - LOG_CALIBRATION_INTERVAL);
         }
 
-        last_write_time = time_now;
+        
 
-        /*Delete all stale entries*/
-        /*Commented out due to repetiion in the calculate averaged data loop
-        TAILQ_FOREACH(log_entry, &acc_log_entries_head, acc_log_entries )
-        {
-            if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
-            {
-                /*This entry is too old.  Delete it
-                TAILQ_REMOVE(&acc_log_entries_head,  log_entry  , acc_log_entries);
-            }
-        }
-        */
+
         /*Calculate averaged data*/
         long entry_count = 0;
-        double x_sum, y_sum, z_sum, a_sum, r_sum, p_sum;
-        double x_sum_corrected, y_sum_corrected, z_sum_corrected, a_sum_corrected, r_sum_corrected, p_sum_corrected;
-        TAILQ_FOREACH(log_entry, &acc_log_entries_head, acc_log_entries )
-        {
 
-            if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
+        double x_sum=0;
+        double y_sum=0;
+        double z_sum=0;
+        double a_sum=0;
+        double r_sum=0;
+        double p_sum=0;
+
+        double x_sum_corrected=0;
+        double y_sum_corrected=0;
+        double z_sum_corrected=0;
+        double a_sum_corrected=0;
+        double r_sum_corrected=0;
+        double p_sum_corrected=0;
+
+        /*It seems like you can't do a REMOVE during a FOREACH or else you truncate*/
+        /*TAILQ_FOREACH(log_entry, &acc_log_entries_head, acc_log_entries )*/
+
+        for (log_entry=TAILQ_FIRST(&acc_log_entries_head); log_entry!=NULL;log_entry=tmp_log_entry)
+        {
+            /*printf("START OF FOR EACH LOG ENTRY\n");*/
+            /*I think this is used to detect the end of the queue and end the loop*/
+            tmp_log_entry = TAILQ_NEXT(log_entry,acc_log_entries);
+            
+            /*if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)*/
+            /*printf(" Time Now: %.3f Log Entry Time: %.3f Last Write Time: %.3f", time_now, log_entry->t,last_write_time);*/
+            if (log_entry->t < last_write_time)
             {
+                /*printf("REMOVING ENTRY\n");*/
                 /*This entry is too old.  Delete it*/
                 TAILQ_REMOVE(&acc_log_entries_head,  log_entry  , acc_log_entries);
+                free(log_entry);
+                
             }
+            
             else
             {
-
+                /*printf("PROCESING ENTRY\n");*/
+                
                 /*Here we run through all the collected nodes and calc the averages*/
                 entry_count++;
 
-                /*Uncorrected Data*/
+                /*Sum Uncorrected Data*/
                 x_sum += log_entry->x;
                 y_sum += log_entry->y;
                 z_sum += log_entry->z;
@@ -1334,14 +1377,8 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 r_sum += log_entry->r;
                 p_sum += log_entry->p;
 
-                acc_averages.x = x_sum/entry_count;
-                acc_averages.y = y_sum/entry_count;
-                acc_averages.z = z_sum/entry_count;
-                acc_averages.a = a_sum/entry_count;
-                acc_averages.r = r_sum/entry_count;
-                acc_averages.p = p_sum/entry_count;
                 
-                /*Corrected Data*/
+                /*Calculate Corrected Data*/
                 double x_corrected = log_entry->x-acc_corrections.x;
                 double y_corrected = log_entry->y-acc_corrections.y;
                 double z_corrected = log_entry->z-acc_corrections.z;
@@ -1349,36 +1386,93 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 double r_corrected = log_entry->r-acc_corrections.r;
                 double p_corrected = log_entry->p-acc_corrections.p;
 
+                /*
                 if (abs(x_corrected) < acc_thresholds.x) {x_corrected=0;}
                 if (abs(y_corrected) < acc_thresholds.y) {y_corrected=0;}
                 if (abs(z_corrected) < acc_thresholds.z) {z_corrected=0;}
                 if (abs(a_corrected) < acc_thresholds.a) {a_corrected=0;}
                 if (abs(r_corrected) < acc_thresholds.r) {r_corrected=0;}
                 if (abs(p_corrected) < acc_thresholds.p) {p_corrected=0;}
+*/
 
-                x_sum_corrected += x_corrected;      
+
+                /*Sum Corrected Data*/
+                x_sum_corrected += x_corrected;
                 y_sum_corrected += y_corrected;
                 z_sum_corrected += z_corrected;
                 a_sum_corrected += a_corrected;
                 r_sum_corrected += r_corrected;
                 p_sum_corrected += p_corrected;
 
-                acc_averages_corrected.x = x_sum_corrected/entry_count;
-                acc_averages_corrected.y = y_sum_corrected/entry_count;
-                acc_averages_corrected.z = z_sum_corrected/entry_count;
-                acc_averages_corrected.a = a_sum_corrected/entry_count;
-                acc_averages_corrected.r = r_sum_corrected/entry_count;
-                acc_averages_corrected.p = p_sum_corrected/entry_count;
+
+
+
+
+                /*printf("PER ENTRY DATA:\t%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
+                            log_entry->t,\
+
+                            x_corrected,\
+                            y_corrected,\
+                            z_corrected,\
+                            a_corrected,\
+                            r_corrected,\
+                            p_corrected,\
+
+
+                            log_entry->x,\
+                            log_entry->y,\
+                            log_entry->z,\
+                            log_entry->a,\
+                            log_entry->r,\
+                            log_entry->p);
+*/
+
+        
 
                 /*debug info*/
                 /*printf ("sums: %.2f %.2f %.2f ", x_sum, y_sum, z_sum);*/
             }
-
-       
-            
-
         }
 
+        /*We have sums and a count, calculate averages*/
+        acc_averages.x = x_sum/entry_count;
+        acc_averages.y = y_sum/entry_count;
+        acc_averages.z = z_sum/entry_count;
+        acc_averages.a = a_sum/entry_count;
+        acc_averages.r = r_sum/entry_count;
+        acc_averages.p = p_sum/entry_count;
+
+        /*This is how it should be done:*/
+        acc_averages_corrected.x = x_sum_corrected/(float)entry_count;
+        acc_averages_corrected.y = y_sum_corrected/(float)entry_count;
+        //printf("\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
+        acc_averages_corrected.z = z_sum_corrected/(float)entry_count;
+        acc_averages_corrected.a = a_sum_corrected/(float)entry_count;
+        acc_averages_corrected.r = r_sum_corrected/(float)entry_count;
+        acc_averages_corrected.p = p_sum_corrected/(float)entry_count;
+
+
+        if (fabs(acc_averages_corrected.x) < acc_thresholds.x) {acc_averages_corrected.x=0;}
+        if (fabs(acc_averages_corrected.y) < acc_thresholds.y) {acc_averages_corrected.y=0;}
+        if (fabs(acc_averages_corrected.z) < acc_thresholds.z) {acc_averages_corrected.z=0;}
+        if (fabs(acc_averages_corrected.a) < acc_thresholds.a) {acc_averages_corrected.a=0;}
+        if (fabs(acc_averages_corrected.r) < acc_thresholds.r) {acc_averages_corrected.r=0;}
+        if (fabs(acc_averages_corrected.p) < acc_thresholds.p) {acc_averages_corrected.p=0;}
+
+        //printf("\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
+
+        /*
+        acc_averages_corrected.x = x_sum/entry_count - acc_corrections.x;
+        acc_averages_corrected.y = y_sum/entry_count - acc_corrections.y;
+        acc_averages_corrected.z = z_sum/entry_count - acc_corrections.z;
+        acc_averages_corrected.a = a_sum/entry_count - acc_corrections.a;
+        acc_averages_corrected.r = r_sum/entry_count - acc_corrections.r;
+        acc_averages_corrected.p = p_sum/entry_count - acc_corrections.p;
+        */
+
+
+        
+        /*Finally, print out the log line*/
         printf("%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
                             time_now,\
 
@@ -1399,7 +1493,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
 
 
-
+        last_write_time = time_now;
 
 
         /*Check to see if we are still in the calibration interval*/
@@ -1422,20 +1516,31 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
             acc_corrections.r=acc_averages.r;
             acc_corrections.p=acc_averages.p;
 
-            /*
-            acc_thresholds.x=acc_averages.x;
-            acc_thresholds.y=acc_averages.y;
-            acc_thresholds.z=acc_averages.z;
-            acc_thresholds.a=acc_averages.a;
-            acc_thresholds.r=acc_averages.r;
-            acc_thresholds.p=acc_averages.p;
-            */
-            printf("\tx\t%.2f\n",acc_corrections.x);
-            printf("\ty\t%.2f\n",acc_corrections.y);
-            printf("\tz\t%.2f\n",acc_corrections.z);
-            printf("\ta\t%.2f\n",acc_corrections.a);
-            printf("\tr\t%.2f\n",acc_corrections.r);
-            printf("\tp\t%.2f\n",acc_corrections.p);
+
+            if (ACC_STATIC_THRESHOLD < 0)
+            {
+                acc_thresholds.x=acc_averages.x;
+                acc_thresholds.y=acc_averages.y;
+                acc_thresholds.z=acc_averages.z;
+                acc_thresholds.a=acc_averages.a;
+                acc_thresholds.r=acc_averages.r;
+                acc_thresholds.p=acc_averages.p;
+            }
+            else
+            {
+                acc_thresholds.x=ACC_STATIC_THRESHOLD;
+                acc_thresholds.y=ACC_STATIC_THRESHOLD;
+                acc_thresholds.z=ACC_STATIC_THRESHOLD;
+                acc_thresholds.a=ACC_STATIC_THRESHOLD;
+                acc_thresholds.r=ACC_STATIC_THRESHOLD;
+                acc_thresholds.p=ACC_STATIC_THRESHOLD;
+            }
+            printf("\tx\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.x, acc_thresholds.x);
+            printf("\ty\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.y, acc_thresholds.y);
+            printf("\tz\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.z, acc_thresholds.z);
+            printf("\ta\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.a, acc_thresholds.a);
+            printf("\tr\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.r, acc_thresholds.r);
+            printf("\tp\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.p, acc_thresholds.p);
 
             f_calibration_complete = -1;
 
