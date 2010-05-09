@@ -1236,48 +1236,56 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
   //  printf("START OF WRITE LOG\n");
 
-    static double log_writes_per_second = 10;
+    //LOG_WRITE_INTERVAL:  How often, in seconds, to write to the log.
+    static double LOG_WRITE_INTERVAL = .1;
+    //LOG_CALIBRATION_INTERVAL:  How long, in seconds, to collect calibration data
     static double LOG_CALIBRATION_INTERVAL = 2.0;
+    //LOG_AVERAGING_INTERVAL:  How far back in time to average data for smoothing
     static double LOG_AVERAGING_INTERVAL = 0.1;
-    /*if ACC_STATIC_THRESHOLD is >=0, it will be used as the threshold.
+    /*ACC_STATIC_THRESHOLD:  corrected ACC values will be ignored if below this value.
      *if it is negative, the calibration value for each axis will be used.
      */
-    static double ACC_STATIC_THRESHOLD = .0000005;
+    static double ACC_STATIC_THRESHOLD = .005;
+    /* ACC_REPORTING_INTERVAL_LIMIT:  If no report is received for this amount
+     * of time, acc should be assumed to be zero across the board.  Sometimes
+     * (low battery?) the wiimote just doesn't report often if there isn't
+     * movement.  Set it to a negative number if you don't want this feature.
+     */
+    static double ACC_REPORTING_INTERVAL_LIMIT = .015;
+
     static double log_start_time = -1.0;
     static double last_write_time = 0.0;
+    static double last_entry_time = 0.0;
     double time_now = 0;
 
+    //acc_corrections: correction values, per axis
     static struct acc_log_entry acc_corrections;
+    //acc_thresholds: threshold values, per axis
     static struct acc_log_entry acc_thresholds;
 
+    //acc_averages: calculated, per axis, every LOG_WRITE_INTERVAL
     struct acc_log_entry acc_averages;
+    //acc_averages_corrected: calculated, per axis, every LOG_WRITE_INTERVAL
     struct acc_log_entry acc_averages_corrected;
-    struct acc_log_entry *new_entry;
-    struct acc_log_entry *log_entry;
-    struct acc_log_entry *tmp_log_entry;
 
+    //*new_entry: the entry that is collected this time around
+    struct acc_log_entry *new_entry = NULL;
+    //*log_entry: used for iterating the entry queue
+    struct acc_log_entry *log_entry = NULL;
+    //*tmp_log_entry: lookahead value for iterating the entry queue
+    struct acc_log_entry *tmp_log_entry = NULL;
+
+    //f_calibration_complete: 0 if incomplete, nonzero if complete.
     static int f_calibration_complete = 0;
 
-
-  
-/***TODO
-     * The static structs need to be malloc'ed but that doesn
-     * make sense if they are to be static
-     * we need to find a way to save the corrections/threshholds between 
-     * function calls
-     * Oh, OO, where are you when I need you most?
-     */
-
-    
-
-    /* Get the start_time to track the calibration interval and to make
-     * the reported times start at 0
-     *
-     * we track time_now as 0 at log_start_time;
-     *
-     *      */
+    //If this is the first time through, grab log_start_time
     if (log_start_time<=0) {log_start_time=time_in_seconds();}
+
+    //time_now is 0 based:
     time_now = time_in_seconds()-log_start_time;
+
+
+
 
     /*collect the current entry*/
     new_entry = malloc(sizeof(*log_entry));
@@ -1290,6 +1298,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
     new_entry->r = roll;
     new_entry->p = pitch;
 /*
+    //Print out every entry as it is collected (DEBUG):
     printf("\t%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
                     time_now,\
 
@@ -1308,18 +1317,19 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
 */
 
-
-
+    //This queue was inited in the global space, maybe it should be done locally?
     TAILQ_INSERT_HEAD(&acc_log_entries_head, new_entry, acc_log_entries);
+    
+
+
 
     /*if it has been long enough to write a record, then purge stale entries
      calculate averaged and corrected data and output it.*/
-
-    if ( time_now >= last_write_time + 1/log_writes_per_second)
+    if ( time_now >= last_write_time + LOG_WRITE_INTERVAL)
     {
 
         if (f_calibration_complete == 0){
-            printf("calibrating....%f.2\t", time_now - LOG_CALIBRATION_INTERVAL);
+            fprintf(stderr, "calibrating....%f.2\t", time_now - LOG_CALIBRATION_INTERVAL);
         }
 
         
@@ -1347,23 +1357,25 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
         for (log_entry=TAILQ_FIRST(&acc_log_entries_head); log_entry!=NULL;log_entry=tmp_log_entry)
         {
-            /*printf("START OF FOR EACH LOG ENTRY\n");*/
-            /*I think this is used to detect the end of the queue and end the loop*/
+            /*fprintf(stderr, "START OF FOR EACH LOG ENTRY\n");*/
+
+            //tmp_log_entry takes a peek at NEXT, so that the end of the queue can be detected
             tmp_log_entry = TAILQ_NEXT(log_entry,acc_log_entries);
             
-            /*if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)*/
+            
+            
             /*printf(" Time Now: %.3f Log Entry Time: %.3f Last Write Time: %.3f", time_now, log_entry->t,last_write_time);*/
-            if (log_entry->t < last_write_time)
+            //check the freshness label on this entry:
+            if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
             {
-                /*printf("REMOVING ENTRY\n");*/
-                /*This entry is too old.  Delete it*/
+                //skunky entry, remove it.
                 TAILQ_REMOVE(&acc_log_entries_head,  log_entry  , acc_log_entries);
                 free(log_entry);
-                
             }
-            
             else
             {
+                //code blue on this entry, lets explore the cold rocky mountain flavor
+
                 /*printf("PROCESING ENTRY\n");*/
                 
                 /*Here we run through all the collected nodes and calc the averages*/
@@ -1386,15 +1398,17 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 double r_corrected = log_entry->r-acc_corrections.r;
                 double p_corrected = log_entry->p-acc_corrections.p;
 
-                /*
-                if (abs(x_corrected) < acc_thresholds.x) {x_corrected=0;}
-                if (abs(y_corrected) < acc_thresholds.y) {y_corrected=0;}
-                if (abs(z_corrected) < acc_thresholds.z) {z_corrected=0;}
-                if (abs(a_corrected) < acc_thresholds.a) {a_corrected=0;}
-                if (abs(r_corrected) < acc_thresholds.r) {r_corrected=0;}
-                if (abs(p_corrected) < acc_thresholds.p) {p_corrected=0;}
-*/
 
+                /* I'm applying the threshold here, although it could
+                 * be done after averaging, I guess
+                 */
+
+                if (fabs(x_corrected) < acc_thresholds.x) {x_corrected=0;}
+                if (fabs(y_corrected) < acc_thresholds.y) {y_corrected=0;}
+                if (fabs(z_corrected) < acc_thresholds.z) {z_corrected=0;}
+                if (fabs(a_corrected) < acc_thresholds.a) {a_corrected=0;}
+                if (fabs(r_corrected) < acc_thresholds.r) {r_corrected=0;}
+                if (fabs(p_corrected) < acc_thresholds.p) {p_corrected=0;}
 
                 /*Sum Corrected Data*/
                 x_sum_corrected += x_corrected;
@@ -1405,10 +1419,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 p_sum_corrected += p_corrected;
 
 
-
-
-
-                /*printf("PER ENTRY DATA:\t%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
+               /* fprintf(stderr, "PER ENTRY DATA:\t%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
                             log_entry->t,\
 
                             x_corrected,\
@@ -1435,45 +1446,82 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
         }
 
         /*We have sums and a count, calculate averages*/
-        acc_averages.x = x_sum/entry_count;
-        acc_averages.y = y_sum/entry_count;
-        acc_averages.z = z_sum/entry_count;
-        acc_averages.a = a_sum/entry_count;
-        acc_averages.r = r_sum/entry_count;
-        acc_averages.p = p_sum/entry_count;
+        acc_averages.x = (float) (x_sum/(float)entry_count);
+        acc_averages.y = (float) (y_sum/(float)entry_count);
+        acc_averages.z = (float) (z_sum/(float)entry_count);
+        acc_averages.a = (float) (a_sum/(float)entry_count);
+        acc_averages.r = (float) (r_sum/(float)entry_count);
+        acc_averages.p = (float) (p_sum/(float)entry_count);
 
         /*This is how it should be done:*/
-        acc_averages_corrected.x = x_sum_corrected/(float)entry_count;
-        acc_averages_corrected.y = y_sum_corrected/(float)entry_count;
-        //printf("\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
-        acc_averages_corrected.z = z_sum_corrected/(float)entry_count;
-        acc_averages_corrected.a = a_sum_corrected/(float)entry_count;
-        acc_averages_corrected.r = r_sum_corrected/(float)entry_count;
-        acc_averages_corrected.p = p_sum_corrected/(float)entry_count;
+        acc_averages_corrected.x = (float) (x_sum_corrected/(float)entry_count);
+        acc_averages_corrected.y = (float) (y_sum_corrected/(float)entry_count);
+        //fprintf(stderr, "\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
+        acc_averages_corrected.z = (float) (z_sum_corrected/(float)entry_count);
+        acc_averages_corrected.a = (float) (a_sum_corrected/(float)entry_count);
+        acc_averages_corrected.r = (float) (r_sum_corrected/(float)entry_count);
+        acc_averages_corrected.p = (float) (p_sum_corrected/(float)entry_count);
 
-
+        /* This is the other place we could have done thresholding (instead
+         * of per entry).
+         */
+        /*
         if (fabs(acc_averages_corrected.x) < acc_thresholds.x) {acc_averages_corrected.x=0;}
         if (fabs(acc_averages_corrected.y) < acc_thresholds.y) {acc_averages_corrected.y=0;}
         if (fabs(acc_averages_corrected.z) < acc_thresholds.z) {acc_averages_corrected.z=0;}
         if (fabs(acc_averages_corrected.a) < acc_thresholds.a) {acc_averages_corrected.a=0;}
         if (fabs(acc_averages_corrected.r) < acc_thresholds.r) {acc_averages_corrected.r=0;}
         if (fabs(acc_averages_corrected.p) < acc_thresholds.p) {acc_averages_corrected.p=0;}
-
-        //printf("\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
-
-        /*
-        acc_averages_corrected.x = x_sum/entry_count - acc_corrections.x;
-        acc_averages_corrected.y = y_sum/entry_count - acc_corrections.y;
-        acc_averages_corrected.z = z_sum/entry_count - acc_corrections.z;
-        acc_averages_corrected.a = a_sum/entry_count - acc_corrections.a;
-        acc_averages_corrected.r = r_sum/entry_count - acc_corrections.r;
-        acc_averages_corrected.p = p_sum/entry_count - acc_corrections.p;
         */
+        //fprintf(stderr, "\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
 
-
+        //If its been too long since our last write, write out a 0 line
         
+        if ((ACC_REPORTING_INTERVAL_LIMIT > 0)  &&
+            (time_now > last_entry_time+ACC_REPORTING_INTERVAL_LIMIT))
+        {
+            /* It has been too long since we got a report.  Fill in the missing
+             * reports with 0 accelerations.  TODO:  figure out how pitch and
+             * roll should really work.
+             */
+            
+            double t;
+
+            for (t=last_entry_time;t+LOG_WRITE_INTERVAL<= time_now;t+=LOG_WRITE_INTERVAL)
+            {
+
+                printf("%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
+                                    t,\
+
+                                    0,\
+                                    0,\
+                                    0,\
+                                    0,\
+                                    acc_averages_corrected.r,\
+                                    acc_averages_corrected.p,\
+
+
+                                    acc_corrections.x,\
+                                    acc_corrections.y,\
+                                    acc_corrections.z,\
+                                    acc_corrections.a,\
+                                    acc_corrections.r,\
+                                    acc_corrections.p);
+
+
+                    }
+
+
+                }
+
+
+
+
+
+
+
         /*Finally, print out the log line*/
-        printf("%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,\t%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
+        printf("%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
                             time_now,\
 
                             acc_averages_corrected.x,\
@@ -1492,7 +1540,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                             acc_averages.p);
 
 
-
+        //update the last write time.
         last_write_time = time_now;
 
 
@@ -1535,18 +1583,18 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 acc_thresholds.r=ACC_STATIC_THRESHOLD;
                 acc_thresholds.p=ACC_STATIC_THRESHOLD;
             }
-            printf("\tx\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.x, acc_thresholds.x);
-            printf("\ty\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.y, acc_thresholds.y);
-            printf("\tz\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.z, acc_thresholds.z);
-            printf("\ta\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.a, acc_thresholds.a);
-            printf("\tr\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.r, acc_thresholds.r);
-            printf("\tp\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.p, acc_thresholds.p);
+            fprintf(stderr,"\tx\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.x, acc_thresholds.x);
+            fprintf(stderr,"\ty\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.y, acc_thresholds.y);
+            fprintf(stderr,"\tz\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.z, acc_thresholds.z);
+            fprintf(stderr,"\ta\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.a, acc_thresholds.a);
+            fprintf(stderr,"\tr\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.r, acc_thresholds.r);
+            fprintf(stderr,"\tp\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.p, acc_thresholds.p);
 
             f_calibration_complete = -1;
 
         }
     }
-
+    last_entry_time = time_now;
 
     }
     
