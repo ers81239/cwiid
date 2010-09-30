@@ -1192,11 +1192,11 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
   //  printf("START OF WRITE LOG\n");
 
     //LOG_WRITE_INTERVAL:  How often, in seconds, to write to the log.
-    static double LOG_WRITE_INTERVAL = .1;
+    static double LOG_WRITE_INTERVAL = .2;
     //LOG_CALIBRATION_INTERVAL:  How long, in seconds, to collect calibration data
     static double LOG_CALIBRATION_INTERVAL = 2.0;
     //LOG_AVERAGING_INTERVAL:  How far back in time to average data for smoothing
-    static double LOG_AVERAGING_INTERVAL = 0.1;
+    static double LOG_AVERAGING_INTERVAL = 0.4;
     /*ACC_STATIC_THRESHOLD:  corrected ACC values will be ignored if below this value.
      *if it is negative, the calibration value for each axis will be used.
      */
@@ -1503,7 +1503,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
         //Indicate we are still calibrating with the lights 1,2,4
         gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED1), TRUE);
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED2), TRUE);
-	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED3), FALSE);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED3), TRUE);
 	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED4), TRUE);
 
         acc_corrections.x=0;
@@ -1551,7 +1551,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
             f_calibration_complete = -1;
             
             /*Indicate completion with the lights*/
-            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED1), FALSE);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED1), TRUE);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED2), FALSE);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED3), FALSE);
             gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED4), FALSE);
@@ -1595,25 +1595,19 @@ void cwiid_acc(struct cwiid_acc_mesg *mesg)
 
                 g_snprintf(str, LBLVAL_LEN, "%.2f", a_x);
                 gtk_label_set_text(GTK_LABEL(lblAccXVal), str);
-		/*These progress bars are broken due to calibration it appears
-                 * 
-                 * ers81239's logging system uses a different calibration system,
-                 * which seems to be working.  Turnning these off for now to 
-                 * avoid all the stderr messages about exceeding 100%
-                gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
 		                              (double)mesg->acc[CWIID_X]/0xFF);
-                 */
+                
 		g_snprintf(str, LBLVAL_LEN, "%.2f", a_y);
 		gtk_label_set_text(GTK_LABEL(lblAccYVal), str);
-		/*
-                 * gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
 		                              (double)mesg->acc[CWIID_Y]/0xFF);
-                 */
+                
 		g_snprintf(str, LBLVAL_LEN, "%.2f",a_z);
 		gtk_label_set_text(GTK_LABEL(lblAccZVal), str);
-		/*gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
+		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
 		                              (double)mesg->acc[CWIID_Z]/0xFF);
-*/
+
 
 		g_snprintf(str, LBLVAL_LEN, "%.2f", a);
 		gtk_label_set_text(GTK_LABEL(lblAccVal), str);

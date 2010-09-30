@@ -93,12 +93,21 @@ int process_acc(struct wiimote *wiimote, const unsigned char *data,
 	if (wiimote->state.rpt_mode & CWIID_RPT_ACC) {
 		acc_mesg = &ma->array[ma->count++].acc_mesg;
 		acc_mesg->type = CWIID_MESG_ACC;
+                /*This bit was introduced when I took in bobbens changes
+                 * however, it seems to cause problems for me, possibly because
+                 * I'm not using motion plus.  I've changed it back to how it
+                 * was before I merged with bobbens
 		acc_mesg->acc[CWIID_X] = ((uint16_t)data[3] << 2) |
                                ((uint16_t)data[0] & ((1<<6) | (1<<5)));
 		acc_mesg->acc[CWIID_Y] = ((uint16_t)data[4] << 2) |
                                ((uint16_t)data[1] & (1<<5));
 		acc_mesg->acc[CWIID_Z] = ((uint16_t)data[5] << 2) |
                                ((uint16_t)data[1] & (1<<6));
+                 */
+                acc_mesg->acc[CWIID_X] = data[0];
+                acc_mesg->acc[CWIID_Y] = data[1];
+                acc_mesg->acc[CWIID_Z] = data[2];
+
 	}
 
 	return 0;
