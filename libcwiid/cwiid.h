@@ -163,6 +163,10 @@ struct acc_cal {
 	uint8_t one[3];
 };
 
+struct motionplus_cal {
+	uint16_t zero[3];
+};
+
 struct balance_cal {
 	uint16_t right_top[3];
 	uint16_t right_bottom[3];
@@ -184,7 +188,7 @@ struct cwiid_btn_mesg {
 
 struct cwiid_acc_mesg {
 	enum cwiid_mesg_type type;
-	uint8_t acc[3];
+	uint16_t acc[3];
 };
 
 struct cwiid_ir_src {
@@ -201,7 +205,7 @@ struct cwiid_ir_mesg {
 struct cwiid_nunchuk_mesg {
 	enum cwiid_mesg_type type;
 	uint8_t stick[2];
-	uint8_t acc[3];
+	uint16_t acc[3];
 	uint8_t buttons;
 };
 
@@ -226,6 +230,7 @@ struct cwiid_motionplus_mesg {
 	enum cwiid_mesg_type type;
 	uint16_t angle_rate[3];
 	uint8_t low_speed[3];
+   uint8_t extension;
 };
 
 struct cwiid_error_mesg {
@@ -247,6 +252,7 @@ union cwiid_mesg {
 };
 
 /* State Structs */
+union ext_state;
 struct nunchuk_state {
 	uint8_t stick[2];
 	uint8_t acc[3];
@@ -271,6 +277,11 @@ struct balance_state {
 struct motionplus_state {
 	uint16_t angle_rate[3];
 	uint8_t low_speed[3];
+   enum cwiid_ext_type ext_type; /**< It can have an extension connected. */
+   union {
+      struct nunchuk_state nunchuk;
+      struct classic_state classic;
+   } ext;
 };
 
 union ext_state {
@@ -339,6 +350,8 @@ int cwiid_get_mesg(cwiid_wiimote_t *wiimote, int *mesg_count,
                    union cwiid_mesg *mesg[], struct timespec *timestamp);
 int cwiid_get_state(cwiid_wiimote_t *wiimote, struct cwiid_state *state);
 int cwiid_get_acc_cal(struct wiimote *wiimote, enum cwiid_ext_type ext_type,
+                      struct acc_cal *acc_cal);
+int cwiid_get_gyro_cal(struct wiimote *wiimote, enum cwiid_ext_type ext_type,
                       struct acc_cal *acc_cal);
 int cwiid_get_balance_cal(struct wiimote *wiimote,
                           struct balance_cal *balance_cal);

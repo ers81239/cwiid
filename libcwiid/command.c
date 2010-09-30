@@ -21,6 +21,7 @@
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <errno.h>
 #include "cwiid_internal.h"
 
 int cwiid_command(cwiid_wiimote_t *wiimote, enum cwiid_command command,
@@ -48,32 +49,31 @@ int cwiid_command(cwiid_wiimote_t *wiimote, enum cwiid_command command,
 	return ret;
 }
 
-/* TODO: fix error reporting - this is public now and
- * should report its own errors */
 int cwiid_send_rpt(cwiid_wiimote_t *wiimote, uint8_t flags, uint8_t report,
                    size_t len, const void *data)
 {
-	unsigned char *buf;
+	unsigned char buf[32];
 
-	if ((buf = malloc((len*2) * sizeof *buf)) == NULL) {
-		cwiid_err(wiimote, "Memory allocation error (mesg array)");
+   if (len+2 > sizeof(buf)) {
+		cwiid_err( wiimote, "cwiid_send_prt: %d bytes over maximum", len+2-sizeof(buf) );
 		return -1;
 	}
 
 	buf[0] = BT_TRANS_SET_REPORT | BT_PARAM_OUTPUT;
 	buf[1] = report;
-	memcpy(buf+2, data, len);
+   if (len > 0) {
+      memcpy( &buf[2], data, len );
+   }
 	if (!(flags & CWIID_SEND_RPT_NO_RUMBLE)) {
 		buf[2] |= wiimote->state.rumble;
 	}
 
 	if (write(wiimote->ctl_socket, buf, len+2) != (ssize_t)(len+2)) {
-		free(buf);
-		return -1;
+		cwiid_err(wiimote, "cwiid_send_rpt: write: %s", strerror(errno));
+      return -1;
 	}
 	else if (verify_handshake(wiimote)) {
-		free(buf);
-		return -1;
+      return -1;
 	}
 
 	return 0;
