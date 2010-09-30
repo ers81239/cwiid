@@ -163,7 +163,7 @@ int cwiid_get_acc_cal(cwiid_wiimote_t *wiimote, enum cwiid_ext_type ext_type,
 	case CWIID_EXT_NONE:
 		flags = CWIID_RW_EEPROM;
 		offset = 0x16;
-		err_str = "";
+		err_str = "no_ext";
 		break;
 	case CWIID_EXT_NUNCHUK:
 		flags = CWIID_RW_REG;
@@ -186,6 +186,10 @@ int cwiid_get_acc_cal(cwiid_wiimote_t *wiimote, enum cwiid_ext_type ext_type,
 	acc_cal->one[CWIID_Y]  = buf[5];
 	acc_cal->one[CWIID_Z]  = buf[6];
 
+        /*debugging*/
+        printf ("x_zero: %d  x_one: %d ", acc_cal->zero[CWIID_X], acc_cal->one[CWIID_X]);
+        printf ("y_zero: %d  y_one: %d ", acc_cal->zero[CWIID_Y], acc_cal->one[CWIID_Y]);
+        printf ("z_zero: %d  zz_one: %d ", acc_cal->zero[CWIID_Z], acc_cal->one[CWIID_Z]);
 	return 0;
 }
 

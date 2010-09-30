@@ -1173,59 +1173,6 @@ void cwiid_btn(struct cwiid_btn_mesg *mesg)
 	    (mesg->buttons & CWIID_BTN_2) ? &btn_on : &btn_off);
 }
 
-#define LBLVAL_LEN 6
-void cwiid_acc(struct cwiid_acc_mesg *mesg)
-{
-	static gchar str[LBLVAL_LEN];
-	double a_x, a_y, a_z, a;
-	double roll, pitch;
-	
-	if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkAcc))) {
-
-
-		a_x = ((double)mesg->acc[CWIID_X] - wm_cal.zero[CWIID_X]) /
-		      (wm_cal.one[CWIID_X] - wm_cal.zero[CWIID_X]);
-		a_y = ((double)mesg->acc[CWIID_Y] - wm_cal.zero[CWIID_Y]) /
-		      (wm_cal.one[CWIID_Y] - wm_cal.zero[CWIID_Y]);
-		a_z = ((double)mesg->acc[CWIID_Z] - wm_cal.zero[CWIID_Z]) /
-		      (wm_cal.one[CWIID_Z] - wm_cal.zero[CWIID_Z]);
-		a = sqrt(pow(a_x,2)+pow(a_y,2)+pow(a_z,2));
-
-		roll = atan(a_x/a_z);
-		if (a_z <= 0.0) {
-			roll += PI * ((a_x > 0.0) ? 1 : -1);
-		}
-		roll *= -1;
-
-		pitch = atan(a_y/a_z*cos(roll));
-
-                		g_snprintf(str, LBLVAL_LEN, "%.2f", a_x);
-		gtk_label_set_text(GTK_LABEL(lblAccXVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
-		                              (double)mesg->acc[CWIID_X]/0xFF);
-		g_snprintf(str, LBLVAL_LEN, "%.2f", a_y);
-		gtk_label_set_text(GTK_LABEL(lblAccYVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
-		                              (double)mesg->acc[CWIID_Y]/0xFF);
-		g_snprintf(str, LBLVAL_LEN, "%.2f",a_z);
-		gtk_label_set_text(GTK_LABEL(lblAccZVal), str);
-		gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
-		                              (double)mesg->acc[CWIID_Z]/0xFF);
-
-
-		g_snprintf(str, LBLVAL_LEN, "%.2f", a);
-		gtk_label_set_text(GTK_LABEL(lblAccVal), str);
-		g_snprintf(str, LBLVAL_LEN, "%.2f", roll);
-		gtk_label_set_text(GTK_LABEL(lblRollVal), str);
-		g_snprintf(str, LBLVAL_LEN, "%.2f", pitch);
-		gtk_label_set_text(GTK_LABEL(lblPitchVal), str);
-                if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkLog)))
-                {
-                    write_log(a_x,a_y,a_z,a,roll,pitch);
-                }
-
-	}
-}
 
 
 double time_in_seconds()
@@ -1236,6 +1183,8 @@ double time_in_seconds()
     return (double) ((double) t.tv_sec + (double) t.tv_usec / 1000000.0);
 
 }
+
+
 
 void write_log(double a_x, double a_y, double a_z, double a, double roll, double pitch)
 {
@@ -1325,7 +1274,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
     //This queue was inited in the global space, maybe it should be done locally?
     TAILQ_INSERT_HEAD(&acc_log_entries_head, new_entry, acc_log_entries);
-    
+
 
 
 
@@ -1337,8 +1286,6 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
         if (f_calibration_complete == 0){
             fprintf(stderr, "calibrating....%f.2\t", time_now - LOG_CALIBRATION_INTERVAL);
         }
-
-        
 
 
         /*Calculate averaged data*/
@@ -1367,9 +1314,9 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
 
             //tmp_log_entry takes a peek at NEXT, so that the end of the queue can be detected
             tmp_log_entry = TAILQ_NEXT(log_entry,acc_log_entries);
-            
-            
-            
+
+
+
             /*printf(" Time Now: %.3f Log Entry Time: %.3f Last Write Time: %.3f", time_now, log_entry->t,last_write_time);*/
             //check the freshness label on this entry:
             if (log_entry->t + LOG_AVERAGING_INTERVAL < time_now)
@@ -1383,7 +1330,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 //code blue on this entry, lets explore the cold rocky mountain flavor
 
                 /*printf("PROCESING ENTRY\n");*/
-                
+
                 /*Here we run through all the collected nodes and calc the averages*/
                 entry_count++;
 
@@ -1395,7 +1342,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 r_sum += log_entry->r;
                 p_sum += log_entry->p;
 
-                
+
                 /*Calculate Corrected Data*/
                 double x_corrected = log_entry->x-acc_corrections.x;
                 double y_corrected = log_entry->y-acc_corrections.y;
@@ -1444,7 +1391,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                             log_entry->p);
 */
 
-        
+
 
                 /*debug info*/
                 /*printf ("sums: %.2f %.2f %.2f ", x_sum, y_sum, z_sum);*/
@@ -1482,7 +1429,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
         //fprintf(stderr, "\t\ty avg_corrected: %.3f sum corrected: %.3f / entry count: %d\n",acc_averages_corrected.y, y_sum_corrected, entry_count);
 
         //If its been too long since our last write, write out a 0 line
-        
+
         if ((ACC_REPORTING_INTERVAL_LIMIT > 0)  &&
             (time_now > last_entry_time+ACC_REPORTING_INTERVAL_LIMIT))
         {
@@ -1490,7 +1437,7 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
              * reports with 0 accelerations.  TODO:  figure out how pitch and
              * roll should really work.
              */
-            
+
             double t;
 
             for (t=last_entry_time;t+LOG_WRITE_INTERVAL<= time_now;t+=LOG_WRITE_INTERVAL)
@@ -1499,10 +1446,10 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
                 printf("%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f,%10.5f\n",  \
                                     t,\
 
-                                    0,\
-                                    0,\
-                                    0,\
-                                    0,\
+                                    0.0,\
+                                    0.0,\
+                                    0.0,\
+                                    0.0,\
                                     acc_averages_corrected.r,\
                                     acc_averages_corrected.p,\
 
@@ -1553,6 +1500,11 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
         /*Check to see if we are still in the calibration interval*/
     if (f_calibration_complete==0)
     {
+        //Indicate we are still calibrating with the lights 1,2,4
+        gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED1), TRUE);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED2), TRUE);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED3), FALSE);
+	gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED4), TRUE);
 
         acc_corrections.x=0;
         acc_corrections.y=0;
@@ -1597,14 +1549,84 @@ void write_log(double a_x, double a_y, double a_z, double a, double roll, double
             fprintf(stderr,"\tp\tcorrection:%.3f\tthreshold:%.3f\n",acc_corrections.p, acc_thresholds.p);
 
             f_calibration_complete = -1;
+            
+            /*Indicate completion with the lights*/
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED1), FALSE);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED2), FALSE);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED3), FALSE);
+            gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(chkLED4), FALSE);
 
         }
     }
     last_entry_time = time_now;
 
     }
-    
-    
+
+
+}
+
+
+
+#define LBLVAL_LEN 6
+void cwiid_acc(struct cwiid_acc_mesg *mesg)
+{
+	static gchar str[LBLVAL_LEN];
+	double a_x, a_y, a_z, a;
+	double roll, pitch;
+	
+	if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkAcc))) {
+
+
+		a_x = ((double)mesg->acc[CWIID_X] - wm_cal.zero[CWIID_X]) /
+		      (wm_cal.one[CWIID_X] - wm_cal.zero[CWIID_X]);
+		a_y = ((double)mesg->acc[CWIID_Y] - wm_cal.zero[CWIID_Y]) /
+		      (wm_cal.one[CWIID_Y] - wm_cal.zero[CWIID_Y]);
+		a_z = ((double)mesg->acc[CWIID_Z] - wm_cal.zero[CWIID_Z]) /
+		      (wm_cal.one[CWIID_Z] - wm_cal.zero[CWIID_Z]);
+		a = sqrt(pow(a_x,2)+pow(a_y,2)+pow(a_z,2));
+
+		roll = atan(a_x/a_z);
+		if (a_z <= 0.0) {
+			roll += PI * ((a_x > 0.0) ? 1 : -1);
+		}
+		roll *= -1;
+
+		pitch = atan(a_y/a_z*cos(roll));
+
+                g_snprintf(str, LBLVAL_LEN, "%.2f", a_x);
+                gtk_label_set_text(GTK_LABEL(lblAccXVal), str);
+		/*These progress bars are broken due to calibration it appears
+                 * 
+                 * ers81239's logging system uses a different calibration system,
+                 * which seems to be working.  Turnning these off for now to 
+                 * avoid all the stderr messages about exceeding 100%
+                gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccX),
+		                              (double)mesg->acc[CWIID_X]/0xFF);
+                 */
+		g_snprintf(str, LBLVAL_LEN, "%.2f", a_y);
+		gtk_label_set_text(GTK_LABEL(lblAccYVal), str);
+		/*
+                 * gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccY),
+		                              (double)mesg->acc[CWIID_Y]/0xFF);
+                 */
+		g_snprintf(str, LBLVAL_LEN, "%.2f",a_z);
+		gtk_label_set_text(GTK_LABEL(lblAccZVal), str);
+		/*gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(progAccZ),
+		                              (double)mesg->acc[CWIID_Z]/0xFF);
+*/
+
+		g_snprintf(str, LBLVAL_LEN, "%.2f", a);
+		gtk_label_set_text(GTK_LABEL(lblAccVal), str);
+		g_snprintf(str, LBLVAL_LEN, "%.2f", roll);
+		gtk_label_set_text(GTK_LABEL(lblRollVal), str);
+		g_snprintf(str, LBLVAL_LEN, "%.2f", pitch);
+		gtk_label_set_text(GTK_LABEL(lblPitchVal), str);
+                if (gtk_check_menu_item_get_active(GTK_CHECK_MENU_ITEM(chkLog)))
+                {
+                    write_log(a_x,a_y,a_z,a,roll,pitch);
+                }
+
+	}
 }
 
 
